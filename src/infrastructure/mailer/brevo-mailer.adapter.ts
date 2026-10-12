@@ -3,9 +3,13 @@ import { EmailMessage } from '../../domain/email-message';
 import { MailerPort } from '../../domain/ports/mailer.port';
 
 // "Wallet <no-reply@dominio.com>" -> { name: 'Wallet', email: 'no-reply@dominio.com' }
-const parseSender = (from = '') => {
+// Quita comillas externas: `docker run --env-file` las deja dentro del valor.
+const parseSender = (raw = '') => {
+  const from = raw.trim().replace(/^(['"])(.*)\1$/, '$2');
   const match = from.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/);
-  return match ? { name: match[1].trim() || undefined, email: match[2] } : { email: from.trim() };
+  return match
+    ? { name: match[1].trim() || undefined, email: match[2] }
+    : { email: from.trim() };
 };
 
 // Adaptador de salida: implementa MailerPort con la API HTTP de Brevo.

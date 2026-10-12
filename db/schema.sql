@@ -23,3 +23,15 @@ CREATE TABLE IF NOT EXISTS processed_events (
 );
 
 ALTER TABLE processed_events ENABLE ROW LEVEL SECURITY;
+
+-- Directorio de contactos (proyección local de Users): userId -> nombre y email.
+-- Se llena con users.created / users.updated y se usa para los eventos de Accounts,
+-- que solo traen el userId.
+CREATE TABLE IF NOT EXISTS user_contacts (
+  user_id    VARCHAR(100) PRIMARY KEY,
+  name       VARCHAR(255),
+  email      VARCHAR(255) NOT NULL,
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+ALTER TABLE user_contacts ENABLE ROW LEVEL SECURITY;

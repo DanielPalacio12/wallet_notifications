@@ -1,0 +1,19 @@
+# Secretos: las variables se configuran en Render, nunca dentro de la imagen
+.env
+.env.*
+!.env.example
+certs
+
+# Se generan dentro del contenedor
+node_modules
+dist
+coverage
+
+# No hacen falta para ejecutar
+.git
+.gitignore
+test
+*.md
+db
+.vscode
+.idea

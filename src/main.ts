@@ -16,7 +16,11 @@ function kafkaAuth() {
 
   if (process.env.KAFKA_CERT && process.env.KAFKA_KEY) {
     return {
-      ssl: { ca, cert: pem(process.env.KAFKA_CERT), key: pem(process.env.KAFKA_KEY) },
+      ssl: {
+        ca,
+        cert: pem(process.env.KAFKA_CERT),
+        key: pem(process.env.KAFKA_KEY),
+      },
     };
   }
 
@@ -46,7 +50,9 @@ async function bootstrap() {
         ...kafkaAuth(),
       },
       // groupId propio para no competir con otros servicios
-      consumer: { groupId: process.env.KAFKA_GROUP_ID ?? 'notificaciones-service' },
+      consumer: {
+        groupId: process.env.KAFKA_GROUP_ID ?? 'notificaciones-service',
+      },
       // Nest le agrega "-server" al groupId por defecto; así queda el nombre exacto
       postfixId: '',
       // Equivale a auto.offset.reset=earliest: la primera vez lee desde el inicio

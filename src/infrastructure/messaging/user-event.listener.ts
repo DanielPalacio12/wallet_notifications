@@ -1,18 +1,15 @@
 import { HandleUserEventUseCase } from '../../application/handle-user-event.use-case';
+import {
+  invalidFields,
+  ListenerLogger,
+  logDelivery,
+  safeError,
+} from './delivery-logging';
 import { UserEventSchema } from './user-event.schema';
 
-// Lo mínimo que se necesita para loguear (el Logger de Nest lo cumple).
-export interface ListenerLogger {
-  log(message: string): void;
-  warn(message: string): void;
-  error(message: string): void;
-}
+export type { ListenerLogger } from './delivery-logging';
 
-// Los mensajes de error de SMTP/API pueden traer el destinatario: se ocultan los emails.
-const safeError = (err: unknown) =>
-  String((err as Error)?.message ?? err).replace(/[^\s@<>"']+@[^\s@<>"']+/g, '[email]');
-
-// Valida el evento, lo pasa al caso de uso y registra el resultado.
+// Valida el evento de Users, lo pasa al caso de uso y registra el resultado.
 // Logs sin PII: solo eventId, aggregateId, topic y estado del envío.
 // No depende de Nest para poder probarlo de forma aislada.
 export class UserEventListener {
@@ -25,8 +22,9 @@ export class UserEventListener {
   async handle(payload: unknown, topic: string): Promise<void> {
     const parsed = UserEventSchema.safeParse(payload);
     if (!parsed.success) {
-      const fields = parsed.error.issues.map((i) => i.path.join('.') || '(raíz)').join(', ');
-      this.logger.warn(`Evento inválido descartado topic=${topic} campos=[${fields}]`);
+      this.logger.warn(
+        `Evento inválido descartado topic=${topic} campos=[${invalidFields(parsed.error.issues)}]`,
+      );
       return;
     }
 
@@ -36,32 +34,23 @@ export class UserEventListener {
     try {
       const result = await this.handleUserEvent.execute(parsed.data, topic);
 
-      if (result.status === 'skipped') {
-        this.logger.log(`Evento sin email, no se envía correo ${ref}`);
-        return;
-      }
-      if (result.status === 'duplicate') {
-        this.logger.log(`Evento duplicado ignorado ${ref}`);
-        return;
-      }
-
-      const { idempotencyError, delivery } = result;
-      if (idempotencyError) {
-        this.logger.warn(`No se pudo registrar el eventId ${ref}: ${safeError(idempotencyError)}`);
-      }
-      if (delivery.persistenceError) {
+      if (result.directoryError) {
         this.logger.warn(
-          `No se pudo guardar la notificación ${ref}: ${safeError(delivery.persistenceError)}`,
+          `No se pudo actualizar el directorio de contactos ${ref}: ${safeError(result.directoryError)}`,
         );
       }
-      if (delivery.deliveryError) {
-        // TODO: reintentos / dead letter topic
-        this.logger.error(`Envío FALLIDO ${ref}: ${safeError(delivery.deliveryError)}`);
+
+      if (result.status === 'skipped') {
+        this.logger.log(`Evento sin email, no se envía correo ${ref}`);
+      } else if (result.status === 'duplicate') {
+        this.logger.log(`Evento duplicado ignorado ${ref}`);
       } else {
-        this.logger.log(`Correo ENVIADO ${ref}`);
+        logDelivery(this.logger, ref, result.delivery, result.idempotencyError);
       }
     } catch (err) {
-      this.logger.error(`Error inesperado procesando ${ref}: ${safeError(err)}`);
+      this.logger.error(
+        `Error inesperado procesando ${ref}: ${safeError(err)}`,
+      );
     }
   }
 }

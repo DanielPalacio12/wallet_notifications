@@ -15,7 +15,10 @@ export class UserEventsController {
   private readonly listener: UserEventListener;
 
   constructor(handleUserEvent: HandleUserEventUseCase) {
-    this.listener = new UserEventListener(handleUserEvent, new Logger(UserEventsController.name));
+    this.listener = new UserEventListener(
+      handleUserEvent,
+      new Logger(UserEventsController.name),
+    );
   }
 
   @EventPattern(USER_TOPICS.created)

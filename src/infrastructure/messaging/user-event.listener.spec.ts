@@ -2,18 +2,11 @@ import { HandleUserEventUseCase } from '../../application/handle-user-event.use-
 import { SendEmailNotificationUseCase } from '../../application/send-email-notification.use-case';
 import { MailerPort } from '../../domain/ports/mailer.port';
 import { NotificationRepositoryPort } from '../../domain/ports/notification-repository.port';
-import { ProcessedEventRepositoryPort } from '../../domain/ports/processed-event-repository.port';
 import { ListenerLogger, UserEventListener } from './user-event.listener';
-
-// Idempotencia en memoria, con el mismo contrato que la tabla processed_events
-class InMemoryProcessedEvents implements ProcessedEventRepositoryPort {
-  private readonly ids = new Set<string>();
-  async markAsProcessed(eventId: string) {
-    if (this.ids.has(eventId)) return false;
-    this.ids.add(eventId);
-    return true;
-  }
-}
+import {
+  InMemoryProcessedEvents,
+  InMemoryUserDirectory,
+} from './testing/in-memory-fakes';
 
 const userCreated = {
   eventId: '8f14e45f-ceea-467a-9575-6f1d7e2b9c01',
@@ -33,9 +26,11 @@ describe('UserEventListener', () => {
   let listener: UserEventListener;
   let mailer: jest.Mocked<MailerPort>;
   let logs: string[];
+  let directory: InMemoryUserDirectory;
 
   beforeEach(() => {
     mailer = { send: jest.fn().mockResolvedValue(undefined) };
+    directory = new InMemoryUserDirectory();
     const notifications: NotificationRepositoryPort = {
       create: jest.fn().mockResolvedValue(1),
       updateStatus: jest.fn().mockResolvedValue(undefined),
@@ -52,6 +47,7 @@ describe('UserEventListener', () => {
     listener = new UserEventListener(
       new HandleUserEventUseCase(
         new InMemoryProcessedEvents(),
+        directory,
         new SendEmailNotificationUseCase(notifications, mailer),
       ),
       logger,
@@ -68,6 +64,16 @@ describe('UserEventListener', () => {
     expect(email.body).toContain('Daniel');
     expect(email.body).toContain('daniel@example.com');
     expect(email.body).toContain('MEMBER');
+  });
+
+  it('guarda el contacto del usuario en el directorio', async () => {
+    await listener.handle(userCreated, 'users.created');
+
+    expect(await directory.findById('u-123')).toEqual({
+      userId: 'u-123',
+      name: 'Daniel',
+      email: 'daniel@example.com',
+    });
   });
 
   it('es idempotente: dos eventos con el mismo eventId solo envían un correo', async () => {
@@ -101,18 +107,28 @@ describe('UserEventListener', () => {
 
   it('USER_DELETED solo con id: no envía correo ni lo trata como inválido', async () => {
     await listener.handle(
-      { ...userCreated, eventId: 'e-4', eventType: 'USER_DELETED', payload: { id: 'u-123' } },
+      {
+        ...userCreated,
+        eventId: 'e-4',
+        eventType: 'USER_DELETED',
+        payload: { id: 'u-123' },
+      },
       'users.deleted',
     );
 
     expect(mailer.send).not.toHaveBeenCalled();
-    expect(logs.some((l) => l.includes('sin email') && l.includes('e-4'))).toBe(true);
+    expect(logs.some((l) => l.includes('sin email') && l.includes('e-4'))).toBe(
+      true,
+    );
     expect(logs.some((l) => l.includes('inválido'))).toBe(false);
   });
 
   it('escapa el HTML de los datos del usuario', async () => {
     await listener.handle(
-      { ...userCreated, payload: { ...userCreated.payload, name: '<script>x</script>' } },
+      {
+        ...userCreated,
+        payload: { ...userCreated.payload, name: '<script>x</script>' },
+      },
       'users.created',
     );
 
@@ -120,17 +136,28 @@ describe('UserEventListener', () => {
   });
 
   it('no lanza si falla el envío y no loguea el email', async () => {
-    mailer.send.mockRejectedValue(new Error('550 mailbox daniel@example.com not found'));
+    mailer.send.mockRejectedValue(
+      new Error('550 mailbox daniel@example.com not found'),
+    );
 
-    await expect(listener.handle(userCreated, 'users.created')).resolves.toBeUndefined();
+    await expect(
+      listener.handle(userCreated, 'users.created'),
+    ).resolves.toBeUndefined();
 
-    expect(logs.some((l) => l.includes('FALLIDO') && l.includes(userCreated.eventId))).toBe(true);
+    expect(
+      logs.some(
+        (l) => l.includes('FALLIDO') && l.includes(userCreated.eventId),
+      ),
+    ).toBe(true);
     expect(logs.join('\n')).not.toContain('daniel@example.com');
   });
 
   it('descarta eventos inválidos sin enviar correo ni loguear el valor', async () => {
     await listener.handle(
-      { ...userCreated, payload: { ...userCreated.payload, email: 'no-es-email' } },
+      {
+        ...userCreated,
+        payload: { ...userCreated.payload, email: 'no-es-email' },
+      },
       'users.created',
     );
 

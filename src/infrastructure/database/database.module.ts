@@ -12,7 +12,10 @@ const poolProvider = {
       database: process.env.DB_NAME,
       user: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
-      ssl: process.env.DB_SSL_MODE === 'require' ? { rejectUnauthorized: false } : undefined,
+      ssl:
+        process.env.DB_SSL_MODE === 'require'
+          ? { rejectUnauthorized: false }
+          : undefined,
     });
   },
 };

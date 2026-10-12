@@ -19,7 +19,10 @@ describe('SendEmailNotificationUseCase', () => {
   });
 
   it('guarda, envía y marca la notificación como SENT', async () => {
-    const { notification, deliveryError } = await useCase.execute(message, 'email.notifications');
+    const { notification, deliveryError } = await useCase.execute(
+      message,
+      'email.notifications',
+    );
 
     expect(mailer.send).toHaveBeenCalledWith(message);
     expect(deliveryError).toBeUndefined();
@@ -31,7 +34,10 @@ describe('SendEmailNotificationUseCase', () => {
   it('marca FAILED cuando falla el envío', async () => {
     mailer.send.mockRejectedValue(new Error('smtp down'));
 
-    const { notification, deliveryError } = await useCase.execute(message, null);
+    const { notification, deliveryError } = await useCase.execute(
+      message,
+      null,
+    );
 
     expect(deliveryError).toBeInstanceOf(Error);
     expect(notification.status).toBe('FAILED');
@@ -42,7 +48,10 @@ describe('SendEmailNotificationUseCase', () => {
   it('envía el correo aunque falle la base de datos', async () => {
     repository.create.mockRejectedValue(new Error('db down'));
 
-    const { notification, persistenceError } = await useCase.execute(message, null);
+    const { notification, persistenceError } = await useCase.execute(
+      message,
+      null,
+    );
 
     expect(persistenceError).toBeInstanceOf(Error);
     expect(mailer.send).toHaveBeenCalled();

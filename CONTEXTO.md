@@ -2,7 +2,7 @@
 
 Resumen de lo que se hizo, cómo está montado y qué falta. Sin secretos: los valores reales están solo en `.env` y `certs/`, que no se suben a git.
 
-Última actualización: 10 de octubre de 2026.
+Última actualización: 11 de octubre de 2026.
 
 ---
 
@@ -80,8 +80,9 @@ Consumer group: **`notificaciones-service`**, con el nombre exacto: se desactiv�
 | Tópico | eventType | Correo | Estado actual |
 |---|---|---|---|
 | `users.created` | `USER_CREATED` | Tu cuenta ha sido creada (nombre, email, rol) | ✅ Funciona y está probado |
-| `users.updated` | `USER_UPDATED` | Tu cuenta ha sido actualizada (+ estado) | ⚠️ Código listo; Users todavía no publica (0 eventos) |
+| `users.updated` | `USER_UPDATED` | Tu cuenta ha sido actualizada (+ estado) | ✅ Funciona y está probado |
 | `users.deleted` | `USER_DELETED` | Tu cuenta ha sido eliminada | ➖ Users manda solo el `id`, así que se omite sin correo (decisión acordada) |
+| `accounts.created` | `ACCOUNT_CREATED` | Tu cuenta Wallet está lista (id, moneda, saldo, estado) | ✅ Funciona y está probado (el email sale del directorio de contactos) |
 
 Envelope:
 
@@ -94,6 +95,8 @@ Envelope:
   "payload": { "id": "<userId>", "name": "<nombre>", "email": "<email>", "role": "MEMBER", "status": "ACTIVE" }
 }
 ```
+
+**Eventos de Accounts:** `accounts.created` trae `{ accountId, userId, balance, currency, status }`, **sin email ni nombre**. Notifiers guarda `userId → name, email` en la tabla `user_contacts` cada vez que llega `users.created` o `users.updated` (proyección local) y la consulta al llegar la cuenta. Si el usuario no está en el directorio, se omite con un aviso y no se marca como procesado. Si Accounts agrega `accountNumber` al payload, el correo lo muestra.
 
 Comportamiento:
 - **Idempotencia:** `INSERT ... ON CONFLICT DO NOTHING` en `processed_events` antes de enviar. Si el `eventId` ya está, se ignora el evento.
@@ -120,6 +123,7 @@ Comportamiento:
 Tablas (ver `db/schema.sql`):
 - `notifications`: historial de cada envío (`to_email`, `subject`, `body`, `status` PENDING/SENT/FAILED, `topic`, `error_message`, `created_at`, `sent_at`).
 - `processed_events`: `event_id` (PK), `topic`, `processed_at`. Sirve para la idempotencia.
+- `user_contacts`: `user_id` (PK), `name`, `email`, `updated_at`. Directorio para los eventos de Accounts. Se llenó una vez con los eventos ya existentes en `users.*`.
 - Las dos tienen **RLS activado**. El servicio entra como `postgres` (dueño), así que RLS no lo afecta, pero bloquea las keys públicas de Supabase.
 
 ### Brevo
@@ -217,20 +221,28 @@ select topic, count(*) from processed_events group by topic;
 
 ---
 
-## 10. Pendientes
+## 10. Docker
 
-- [ ] Primer commit y subida a GitHub. Revisar en `git status` que no aparezcan `.env` ni `certs/`.
-- [ ] Desplegar en **Render** como Web Service:
-  - Build: `npm install && npm run build`
-  - Start: `npm run start:prod`
-  - Copiar todas las variables del `.env` en *Environment*.
+- `Dockerfile` en dos etapas (Node 24 Alpine): compila con todas las dependencias y la imagen final solo lleva `dist/` y dependencias de producción. Corre como usuario `node`.
+- `.dockerignore` excluye `.env`, `certs/`, `node_modules` y `.git`: los secretos nunca entran a la imagen.
+- Probar en local: `docker build -t notifiers .` y `docker run --rm --env-file .env -p 3000:3000 notifiers`.
+- Si Docker Desktop responde con error 500: cerrarlo, `wsl --shutdown` y volver a abrirlo.
+
+## 11. Pendientes
+
+- [x] Commits locales (repo: `DanielPalacio12/wallet_notifications`).
+- [ ] Push a GitHub (la cuenta `DanielPalacioM` debe aceptar la invitación de colaborador).
+- [ ] Desplegar en **Render** como Web Service con runtime **Docker** (usa el `Dockerfile`):
+  - *Environment* → **Add from .env** (sin `PORT` ni `SMTP_*`).
+  - Health Check Path: `/health`.
+  - El plan gratis se duerme a los 15 min sin tráfico HTTP: usar UptimeRobot contra `/health` cada 5 min.
 - [ ] Probar en Render creando un usuario, con el PC apagado.
 - [ ] Apagar o borrar el Kafka viejo `kafka-wallet-unicolombo-4fd9` en Aiven.
 - [ ] Reintentos / dead letter topic para envíos fallidos (está como TODO en el listener).
 - [ ] (Opcional) Autenticar el dominio en Brevo (DKIM/DMARC) para no caer en spam.
 - [ ] (Opcional) Actualizar Node a ≥ 24.9 para poder testear módulos de Nest con Jest.
 
-## 11. Seguridad
+## 12. Seguridad
 
 - **Rotar después del parcial:** la contraseña de Kafka de wallet-platform, la API key de Brevo y la contraseña de aplicación de Gmail. Las tres se compartieron por chat o comandos.
 - Nunca subir `.env` ni `certs/`. Los dos están en `.gitignore`.

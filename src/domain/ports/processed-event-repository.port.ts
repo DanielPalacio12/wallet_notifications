@@ -5,4 +5,6 @@ export interface ProcessedEventRepositoryPort {
   markAsProcessed(eventId: string, topic: string): Promise<boolean>;
 }
 
-export const PROCESSED_EVENT_REPOSITORY = Symbol('ProcessedEventRepositoryPort');
+export const PROCESSED_EVENT_REPOSITORY = Symbol(
+  'ProcessedEventRepositoryPort',
+);
