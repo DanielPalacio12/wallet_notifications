@@ -189,7 +189,8 @@ select topic, count(*) from processed_events group by topic;
 | Eventos reales de Users en `users.created` | ✅ 4 correos "Tu cuenta ha sido creada" con SENT; idempotencia registrada |
 | Eventos viejos de `users.created` sin `email` | Omitidos (eran de antes de que Users agregara el email) |
 | `users.deleted` (solo `id`) | Omitidos sin correo, según lo acordado |
-| `users.updated` | Sin eventos todavía |
+| `users.updated` | ✅ "Tu cuenta ha sido actualizada" con SENT |
+| `accounts.created` | ✅ "Tu cuenta Wallet está lista" (email tomado de `user_contacts`) |
 
 ---
 
@@ -231,7 +232,7 @@ select topic, count(*) from processed_events group by topic;
 ## 11. Pendientes
 
 - [x] Commits locales (repo: `DanielPalacio12/wallet_notifications`).
-- [ ] Push a GitHub (la cuenta `DanielPalacioM` debe aceptar la invitación de colaborador).
+- [x] Push a GitHub.
 - [ ] Desplegar en **Render** como Web Service con runtime **Docker** (usa el `Dockerfile`):
   - *Environment* → **Add from .env** (sin `PORT` ni `SMTP_*`).
   - Health Check Path: `/health`.
