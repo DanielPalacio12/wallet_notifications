@@ -44,6 +44,7 @@ describe('AccountEventListener', () => {
   let logs: string[];
   let users: UserEventListener;
   let accounts: AccountEventListener;
+  let directory: InMemoryUserDirectory;
 
   beforeEach(() => {
     mailer = { send: jest.fn().mockResolvedValue(undefined) };
@@ -60,14 +61,17 @@ describe('AccountEventListener', () => {
 
     // Mismo directorio e idempotencia compartidos, como en la app real
     const processed = new InMemoryProcessedEvents();
-    const directory = new InMemoryUserDirectory();
+    directory = new InMemoryUserDirectory();
     const sendEmail = new SendEmailNotificationUseCase(notifications, mailer);
     users = new UserEventListener(
       new HandleUserEventUseCase(processed, directory, sendEmail),
       logger,
     );
     accounts = new AccountEventListener(
-      new HandleAccountEventUseCase(processed, directory, sendEmail),
+      new HandleAccountEventUseCase(processed, directory, sendEmail, {
+        attempts: 3,
+        delayMs: 0,
+      }),
       logger,
     );
   });
@@ -138,5 +142,32 @@ describe('AccountEventListener', () => {
 
     expect(mailer.send).not.toHaveBeenCalled();
     expect(logs.some((l) => l.includes('payload.userId'))).toBe(true);
+  });
+
+  it('espera al contacto si la cuenta llega antes que el usuario', async () => {
+    // El contacto se guarda mientras el caso de uso ya está buscando
+    const original = directory.findById.bind(directory);
+    let calls = 0;
+    jest.spyOn(directory, 'findById').mockImplementation(async (id) => {
+      if (++calls === 2) await users.handle(userCreated, 'users.created');
+      return original(id);
+    });
+
+    await accounts.handle(accountCreated, 'accounts.created');
+
+    const subjects = mailer.send.mock.calls.map(([m]) => m.subject);
+    expect(subjects).toContain('Tu cuenta Wallet está lista');
+  });
+
+  it('si la base de datos falla, relanza para que Kafka reintente', async () => {
+    jest
+      .spyOn(directory, 'findById')
+      .mockRejectedValue(new Error('connection timeout'));
+
+    await expect(
+      accounts.handle(accountCreated, 'accounts.created'),
+    ).rejects.toThrow('connection timeout');
+    expect(mailer.send).not.toHaveBeenCalled();
+    expect(logs.some((l) => l.includes('reintentará'))).toBe(true);
   });
 });

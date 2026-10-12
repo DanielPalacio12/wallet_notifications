@@ -15,7 +15,9 @@ export class AccountEventListener {
     private readonly logger: ListenerLogger,
   ) {}
 
-  // Nunca lanza: un evento que falla no debe bloquear el consumo del tópico.
+  // Los eventos inválidos y los fallos de envío se registran y se sigue.
+  // Solo relanza si no se pudo consultar el directorio (p. ej. la BD al despertar):
+  // así Kafka no confirma el mensaje y lo vuelve a entregar en vez de perderlo.
   async handle(payload: unknown, topic: string): Promise<void> {
     const parsed = AccountEventSchema.safeParse(payload);
     if (!parsed.success) {
@@ -42,8 +44,9 @@ export class AccountEventListener {
       }
     } catch (err) {
       this.logger.error(
-        `Error inesperado procesando ${ref}: ${safeError(err)}`,
+        `No se pudo procesar, Kafka lo reintentará ${ref}: ${safeError(err)}`,
       );
+      throw err;
     }
   }
 }
