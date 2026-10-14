@@ -57,7 +57,13 @@ async function bootstrap() {
       postfixId: '',
       // Equivale a auto.offset.reset=earliest: la primera vez lee desde el inicio
       subscribe: { fromBeginning: true },
-      run: { autoCommit: true },
+      run: {
+        autoCommit: true,
+        // KafkaJS procesa un mensaje a la vez por defecto. Si accounts.created llega
+        // antes que users.created, su espera del contacto bloquearía el mensaje del usuario
+        // y la cuenta se omitiría. Con 4 (uno por tópico) se procesan en paralelo.
+        partitionsConsumedConcurrently: 4,
+      },
     },
   });
 

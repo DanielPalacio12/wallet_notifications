@@ -25,7 +25,8 @@ export interface ContactLookupOptions {
   delayMs: number;
 }
 
-// Users y Accounts publican casi al mismo tiempo y los tópicos se consumen en paralelo:
+// Users y Accounts publican casi al mismo tiempo y los tópicos se consumen en paralelo
+// (partitionsConsumedConcurrently en main.ts):
 // la cuenta puede llegar antes de que se guarde el contacto. Se espera hasta ~8 s.
 const DEFAULT_LOOKUP: ContactLookupOptions = { attempts: 5, delayMs: 2000 };
 
